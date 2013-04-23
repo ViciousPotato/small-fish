@@ -1,12 +1,18 @@
 #include <sys/types.h>
+#include <sys/wait.h>
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <unistd.h>
 #include <string.h>
 
-#define PROMPT "small-shell> "
-#define CMDSIZE 256
+#include <readline/readline.h>
+#include <readline/history.h>
+
+#include "builtin.h"
+
+extern BuiltinCmd builtin_commands[];
 
 // Split cmd into char arrays.
 int splitCmd(char *cmd, char ***cmds) {
@@ -36,33 +42,64 @@ int splitCmd(char *cmd, char ***cmds) {
   return i;
 }
 
-int execute_command(char **cmd, int cmdsize, int mstdin, int mstdout, int mstderr, int *pipefd) {
-  if (cmdsize <= 0) return;
+int executeCommand(char **cmd, int cmdsize, int mstdin, int mstdout, int mstderr, int pipefd[]) {
+  if (cmdsize <= 0) return -1;
   
-  printf("execute_command called: cmd=[");
-  int j;
-  for (j = 0; j < cmdsize; j++) {
-    printf("%s,", cmd[j]);
-  }
-  printf("]");
-  printf("cmdsize=%d, stdin=%d, stdout=%d, stderr=%d\n", cmdsize, mstdin, mstdout, mstderr);
-
+  // Check if is builtin command.
   int i;
+  for (i = 0; builtin_commands[i].name; i++) {
+    if (strcmp(builtin_commands[i].name, *cmd) == 0) {
+      builtin_commands[i].func(cmd+1);
+      return -1;
+    }
+  }
+
   for (i = cmdsize-1; i >= 0; i--) {
     char *t = cmd[i];
     if (strcmp(t, "|") == 0) {
       int fd[2];
       pipe(fd);
       cmd[i] = NULL;
-      int pidLeft  = execute_command(cmd, i, mstdin, fd[1], mstderr, fd);
-      int pidRight = execute_command(cmd+i+1, cmdsize-i-1, fd[0], mstdout, mstderr, fd);
+      executeCommand(cmd, i, mstdin, fd[1], mstderr, fd);
+      executeCommand(cmd+i+1, cmdsize-i-1, fd[0], mstdout, mstderr, fd);
       close(fd[0]); close(fd[1]);
-      // Left or right could be other pipes, doesn't need to wait.
-      if (pidLeft > 0) pidLeft = wait(NULL);
-      if (pidRight > 0) pidRight = wait(NULL);
       return -1;
     } else if (strcmp(t, ">") == 0) {
-      printf("> is unimplemeted\n");
+      if (cmd[i+1] == NULL) {
+        perror("Wrong syntax: > should be followed by a file name.");
+        return -1;
+      }
+      int out = open(cmd[i+1], O_RDWR | O_CREAT);
+      cmd[i] = NULL;
+      executeCommand(cmd, cmdsize-2, mstdin, out, mstderr, NULL);
+      // TODO: close out
+      return -1;
+    } else if (strcmp(t, ">>") == 0) {
+      if (cmd[i+1] == NULL) {
+        perror("Wrong syntax: >> should be followed by a file name.");
+        return -1;
+      }
+      int append = open(cmd[i+1], O_RDWR | O_CREAT | O_APPEND);
+      if (append == -1) {
+        perror("Target file doesn't exist");
+        return -1;
+      }
+      cmd[i] = NULL;
+      executeCommand(cmd, cmdsize-2, mstdin, append, mstderr, NULL);
+      // TODO: close append
+    } else if (strcmp(t, "<") == 0) {
+      if (cmd[i+1] == NULL) {
+        perror("Wrong syntax: < should be followed by a file name.");
+        return -1;
+      }
+      int inp = open(cmd[i+1], O_RDONLY);
+      if (inp == -1) {
+        perror("Input file doesn't exit");
+        return -1;
+      }
+      cmd[i] = NULL;
+      executeCommand(cmd, cmdsize-2, inp, mstdout, mstderr, NULL);
+      // TODO: close input
     }
   }
   
@@ -72,21 +109,22 @@ int execute_command(char **cmd, int cmdsize, int mstdin, int mstdout, int mstder
   int pid = fork();
   if (pid == 0) {
     // Child process
+
     if (mstdout != STDOUT_FILENO) {
       dup2(mstdout, STDOUT_FILENO);
-      close(mstdout);
-      if (pipefd) close(pipefd[0]);
     }
     if (mstdin != STDIN_FILENO) {
       dup2(mstdin, STDIN_FILENO);
-      close(mstdin);
-      if (pipefd) close(pipefd[1]);
     }
     if (mstderr != STDERR_FILENO) {
       dup2(mstderr, STDERR_FILENO);
       close(mstderr);
     }
     
+    if (pipefd) {
+      close(pipefd[0]); close(pipefd[1]);
+    }
+
     execvp(command, cmd);
     perror("Can't execute command");
   }
@@ -94,37 +132,47 @@ int execute_command(char **cmd, int cmdsize, int mstdin, int mstdout, int mstder
   return pid;
 }
 
-int main(int argc, char *argv) {
-  char cmd[CMDSIZE];
+int main(int argc, char *argv[]) {
+  char *cmd = NULL;
+  char **cmds = NULL;
+
   while (1) {
-    char *token;
-    int childstat;
-    int redirfd = 0;
-    int foundredir = 0;
+    if (cmd) {
+      free(cmd);
+      cmd = NULL;
+    }
 
-    write(STDOUT_FILENO, PROMPT, sizeof(PROMPT));
-    // Read command
-    int readcnt = read(STDIN_FILENO, cmd, sizeof(cmd));
-    // Remove last \n
-    cmd[readcnt-1] = '\0';
+    if (cmds) {
+      char **f = cmds;
+      while (*f) {
+        free(*f);
+        *f = NULL;
+        f++;
+      }
+      cmds = NULL;
+    }
 
-    char **cmds;
+    char *cwd = getcwd(NULL, 0);
+    char *prompt = (char *)malloc(strlen(cwd)+3); // 'dir> \0' 
+    snprintf(prompt, strlen(cwd)+3, "%s> ", cwd);
+    cmd = readline(prompt);
+    free(cwd);
+    free(prompt);
+
+    if (!cmd || !*cmd) continue;
+
+    add_history(cmd);
+
     int tokencnt = splitCmd(cmd, &cmds);
-    int pid = execute_command(cmds, tokencnt, STDIN_FILENO, STDOUT_FILENO, STDERR_FILENO, NULL);
-    if (pid >= 0) pid = wait(NULL);
-    // Check for I/O redirections.
-    //    for (i = 0; i < childargc; i++) {
-    //if (foundredir) {
-    //  redirfd = open(childargs[i], O_RDWR|O_CREAT);
-    //  break;
-    //}
+    executeCommand(cmds, tokencnt, STDIN_FILENO, STDOUT_FILENO, STDERR_FILENO, NULL);
 
-    //if (strcmp(childargs[i], ">") == 0) {
-        // We found a redirection
-    //  childargs[i] = NULL;
-    //  foundredir = 1;
-    // }
-    //}
-    // Parent
+    // Wait for all child to finish.
+    pid_t pid = 1;
+    int childstatus;
+    while (pid > 0) {
+      pid = wait(&childstatus);
+    }
   }
+
+  return 0;
 }
