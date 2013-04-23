@@ -36,7 +36,7 @@ int splitCmd(char *cmd, char ***cmds) {
   return i;
 }
 
-void execute_command(char **cmd, int cmdsize, int stdin, int stdout, int stderr) {
+int execute_command(char **cmd, int cmdsize, int mstdin, int mstdout, int mstderr, int *pipefd) {
   if (cmdsize <= 0) return;
   
   printf("execute_command called: cmd=[");
@@ -45,19 +45,22 @@ void execute_command(char **cmd, int cmdsize, int stdin, int stdout, int stderr)
     printf("%s,", cmd[j]);
   }
   printf("]");
-  printf("cmdsize=%d, stdin=%d, stdout=%d, stderr=%d\n", cmdsize, stdin, stdout, stderr);
+  printf("cmdsize=%d, stdin=%d, stdout=%d, stderr=%d\n", cmdsize, mstdin, mstdout, mstderr);
 
   int i;
-  for (i = 0; i < cmdsize; i++) {
+  for (i = cmdsize-1; i >= 0; i--) {
     char *t = cmd[i];
     if (strcmp(t, "|") == 0) {
       int fd[2];
-      printf("Piping\n");
       pipe(fd);
       cmd[i] = NULL;
-      execute_command(cmd, i, stdin, fd[1], stderr);
-      execute_command(cmd+i+1, cmdsize-i-1, fd[0], stdout, stderr);
-      return;
+      int pidLeft  = execute_command(cmd, i, mstdin, fd[1], mstderr, fd);
+      int pidRight = execute_command(cmd+i+1, cmdsize-i-1, fd[0], mstdout, mstderr, fd);
+      close(fd[0]); close(fd[1]);
+      // Left or right could be other pipes, doesn't need to wait.
+      if (pidLeft > 0) pidLeft = wait(NULL);
+      if (pidRight > 0) pidRight = wait(NULL);
+      return -1;
     } else if (strcmp(t, ">") == 0) {
       printf("> is unimplemeted\n");
     }
@@ -69,34 +72,26 @@ void execute_command(char **cmd, int cmdsize, int stdin, int stdout, int stderr)
   int pid = fork();
   if (pid == 0) {
     // Child process
-    if (stdout != STDOUT_FILENO) {
-      dup2(stdout, 1);
-      close(stdout);
+    if (mstdout != STDOUT_FILENO) {
+      dup2(mstdout, STDOUT_FILENO);
+      close(mstdout);
+      if (pipefd) close(pipefd[0]);
     }
-    if (stdin != STDIN_FILENO) {
-      dup2(stdin, 0);
-      close(stdin);
+    if (mstdin != STDIN_FILENO) {
+      dup2(mstdin, STDIN_FILENO);
+      close(mstdin);
+      if (pipefd) close(pipefd[1]);
     }
-    if (stderr != STDERR_FILENO) {
-      dup2(stderr, 2);
-      close(stderr);
+    if (mstderr != STDERR_FILENO) {
+      dup2(mstderr, STDERR_FILENO);
+      close(mstderr);
     }
     
-    /*
-    int j = 0;
-    char *arg = childargs[j];
-    while (*arg) {
-      printf("arg %d = %s\n", j, arg);
-      j++;
-      arg = childargs[j];
-    }
-    */
     execvp(command, cmd);
     perror("Can't execute command");
   }
-  int childstat;
-  pid = wait(&childstat);
-  printf("Child finished with: pid:%d, stat:%d\n", pid, childstat);
+
+  return pid;
 }
 
 int main(int argc, char *argv) {
@@ -115,7 +110,8 @@ int main(int argc, char *argv) {
 
     char **cmds;
     int tokencnt = splitCmd(cmd, &cmds);
-    execute_command(cmds, tokencnt, STDIN_FILENO, STDOUT_FILENO, STDERR_FILENO);
+    int pid = execute_command(cmds, tokencnt, STDIN_FILENO, STDOUT_FILENO, STDERR_FILENO, NULL);
+    if (pid >= 0) pid = wait(NULL);
     // Check for I/O redirections.
     //    for (i = 0; i < childargc; i++) {
     //if (foundredir) {
