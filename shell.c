@@ -69,24 +69,24 @@ int executeCommand(char **cmd, int cmdsize, int mstdin, int mstdout, int mstderr
         perror("Wrong syntax: > should be followed by a file name.");
         return -1;
       }
-      int out = open(cmd[i+1], O_RDWR | O_CREAT);
+      int out = open(cmd[i+1], O_RDWR | O_CREAT, 0644);
       cmd[i] = NULL;
       executeCommand(cmd, cmdsize-2, mstdin, out, mstderr, NULL);
-      // TODO: close out
+      close(out);
       return -1;
     } else if (strcmp(t, ">>") == 0) {
       if (cmd[i+1] == NULL) {
         perror("Wrong syntax: >> should be followed by a file name.");
         return -1;
       }
-      int append = open(cmd[i+1], O_RDWR | O_CREAT | O_APPEND);
+      int append = open(cmd[i+1], O_RDWR | O_CREAT | O_APPEND, 0644);
       if (append == -1) {
         perror("Target file doesn't exist");
         return -1;
       }
       cmd[i] = NULL;
       executeCommand(cmd, cmdsize-2, mstdin, append, mstderr, NULL);
-      // TODO: close append
+      close(append);
     } else if (strcmp(t, "<") == 0) {
       if (cmd[i+1] == NULL) {
         perror("Wrong syntax: < should be followed by a file name.");
@@ -99,7 +99,7 @@ int executeCommand(char **cmd, int cmdsize, int mstdin, int mstdout, int mstderr
       }
       cmd[i] = NULL;
       executeCommand(cmd, cmdsize-2, inp, mstdout, mstderr, NULL);
-      // TODO: close input
+      close(inp);
     }
   }
   
@@ -109,7 +109,6 @@ int executeCommand(char **cmd, int cmdsize, int mstdin, int mstdout, int mstderr
   int pid = fork();
   if (pid == 0) {
     // Child process
-
     if (mstdout != STDOUT_FILENO) {
       dup2(mstdout, STDOUT_FILENO);
     }
@@ -134,9 +133,11 @@ int executeCommand(char **cmd, int cmdsize, int mstdin, int mstdout, int mstderr
 
 int main(int argc, char *argv[]) {
   char *cmd = NULL;
+  // Splitted tokens.
   char **cmds = NULL;
 
   while (1) {
+    // First do some cleanups.
     if (cmd) {
       free(cmd);
       cmd = NULL;
@@ -152,6 +153,7 @@ int main(int argc, char *argv[]) {
       cmds = NULL;
     }
 
+    // Print prompt
     char *cwd = getcwd(NULL, 0);
     char *prompt = (char *)malloc(strlen(cwd)+3); // 'dir> \0' 
     snprintf(prompt, strlen(cwd)+3, "%s> ", cwd);
@@ -159,10 +161,13 @@ int main(int argc, char *argv[]) {
     free(cwd);
     free(prompt);
 
+    // Skip empty command
     if (!cmd || !*cmd) continue;
-
+    
+    // Add to readline history
     add_history(cmd);
 
+    // Execute command.
     int tokencnt = splitCmd(cmd, &cmds);
     executeCommand(cmds, tokencnt, STDIN_FILENO, STDOUT_FILENO, STDERR_FILENO, NULL);
 
