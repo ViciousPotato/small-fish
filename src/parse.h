@@ -32,7 +32,6 @@ typedef struct _InpRedirCommandNode {
 
 typedef struct _ASTNode {
   CommandType type;
-  char *cmd;
   union {
     PipeCommandNode pipe;
     PrimCommandNode prim;

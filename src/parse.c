@@ -15,7 +15,8 @@ ASTNode *CreateASTNode() {
   return node;
 }
 
-DestroyASTNode(ASTNode *node) {
+void DestroyASTNode(ASTNode *node) {
+  // TODO: recursively free
   free(node);
 }
 
