@@ -1,0 +1,1 @@
+int EvalCommand(ASTTree *ast);

@@ -7,8 +7,8 @@ typedef enum {
 } CommandType;
 
 typedef struct _PipeCommandNode {
-  char **leftCmdTokens;
-  char **rightCmdTokens;
+  ASTNode *leftCommand;
+  ASTNode *rightCommand;
 } PipeCommandNode;
 
 typedef struct _PrimCommandNode {
@@ -16,17 +16,17 @@ typedef struct _PrimCommandNode {
 } PrimCommandNode;
 
 typedef struct _OutRedirCommandNode {
-  char **cmdTokens;
+  ASTNode *command;
   char *outFile;
 } OutRedirCommandNode;
 
 typedef struct _OutAppendCommandNode {
-  char **cmdTokens;
+  ASTNode *command;
   char *appendFile;
 } OutAppendCommandNode;
 
 typedef struct _InpRedirCommandNode {
-  char **cmdTokens;
+  ASTNode *command;
   char *inpFile;
 } InpRedirCommandNode;
 
