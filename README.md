@@ -3,7 +3,7 @@ small-fish
 
 Toy shell implementation for exercise.
 
-Howto
+How to Use
 =====
 
 ```
@@ -14,3 +14,5 @@ $ ./fish
 ```
 
 Currently support command execution, output/input redirect, and piping.
+
+Also some useless builtins :P
