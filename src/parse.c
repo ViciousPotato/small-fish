@@ -20,7 +20,7 @@ void DestroyASTNode(ASTNode *node) {
   free(node);
 }
 
-ASTree *ParseCmd(char **cmdTokens, int tokenCnt) {
+ASTTree ParseCommand(char **cmdTokens, int tokenCnt) {
   if (tokenCnt <= 0) return NULL;
 
   int i;
@@ -32,49 +32,49 @@ ASTree *ParseCmd(char **cmdTokens, int tokenCnt) {
       cmdTokens[i] = NULL;
       ASTNode *pipeNode = CreateASTNode();
       pipeNode->type = PipeCommand;
-      pipeNode->u.leftCommand = ParseCmd(cmdTokens, i);
-      pipeNode->u.rightCommand = ParseCmd(cmdTokens+i+1, tokenCnt-i-1);
+      pipeNode->u.pipe.leftCommand = ParseCommand(cmdTokens, i);
+      pipeNode->u.pipe.rightCommand = ParseCommand(cmdTokens+i+1, tokenCnt-i-1);
       return pipeNode;
     } else if (strcmp(token, ">") == 0) {
       // If > appears, must be > file in the end. Nothing more.
       // don't support > sth < sth2
       if (cmdTokens[i+1] == NULL) {
         perror("Wrong syntax: > should be followed by a file name.");
-        return -1;
+        return NULL;
       }
       cmdTokens[i] = NULL;
       ASTNode *outNode = CreateASTNode();
       outNode->type = OutRedirCommand;
-      outNode->u.command = ParseCmd(cmdTokens, tokenCnt-2);
-      outNode->outFile = cmdTokens[i+1];
+      outNode->u.out.command = ParseCommand(cmdTokens, tokenCnt-2);
+      outNode->u.out.outFile = cmdTokens[i+1];
       return outNode;
     } else if (strcmp(token, ">>") == 0) {
       if (cmdTokens[i+1] == NULL) {
         perror("Wrong syntax: >> should be followed by a file name.");
-        return -1;
+        return NULL;
       }
       cmdTokens[i] = NULL;
       ASTNode *appNode = CreateASTNode();
       appNode->type = OutAppendCommand;
-      appNode->u.command = ParseCmd(cmdTokens, tokenCnt-2);
-      appNode->appendFile = cmdTokens[i+1];
-      return outNode;
+      appNode->u.app.command = ParseCommand(cmdTokens, tokenCnt-2);
+      appNode->u.app.appendFile = cmdTokens[i+1];
+      return appNode;
     } else if (strcmp(token, "<") == 0) {
       if (cmdTokens[i+1] == NULL) {
         perror("Wrong syntax: < should be followed by a file name.");
-        return -1;
+        return NULL;
       }
       cmdTokens[i] = NULL;
       ASTNode *inpNode = CreateASTNode();
       inpNode->type = InpRedirCommand;
-      inpNode->u.command = ParseCmd(cmdTokens, tokenCnt-2);
-      inpNode->inpFile = cmdTokens[i+1];
-      return outNode;
+      inpNode->u.inp.command = ParseCommand(cmdTokens, tokenCnt-2);
+      inpNode->u.inp.inpFile = cmdTokens[i+1];
+      return inpNode;
     }
   }
   // Prim Command
   ASTNode *primNode = CreateASTNode();
   primNode->type = PrimCommand;
-  primNode->cmdTokens = cmdTokens;
+  primNode->u.prim.cmdTokens = cmdTokens;
   return primNode;
 }

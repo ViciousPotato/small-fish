@@ -1,5 +1,10 @@
-#include "eval.h"
 #include <assert.h>
+#include <unistd.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+
+#include "eval.h"
 
 // Execute Prim Command
 int ExecuteCommand(ASTNode *cmd) {
@@ -7,10 +12,10 @@ int ExecuteCommand(ASTNode *cmd) {
 
   char **cmdTokens = cmd->u.prim.cmdTokens;
   char *command = cmdTokens[0];
-  int fstdin  = cmd->stdfds[0];
-  int fstdin  = cmd->stdfds[1];
-  int fstdin  = cmd->stdfds[2];
-  int *pipefd = cmd->pipefds;
+  int fstdin    = cmd->stdfds[0];
+  int fstdout   = cmd->stdfds[1];
+  int fstderr   = cmd->stdfds[2];
+  int *pipefd   = cmd->pipefds;
 
   int pid = fork();
   if (pid == 0) {
@@ -40,43 +45,69 @@ int ExecuteCommand(ASTNode *cmd) {
 // TODO: I think the name CopyStds maybe more appropriate.
 void CopyFds(ASTNode *dst, ASTNode *src) {
   if (dst == NULL || src == NULL) return;
-  dst->stdfds[0] = src->stdfdsp[0];
-  dst->stdfds[1] = src->stdfdsp[1];
-  dst->stdfds[2] = src->stdfdsp[2];
+  dst->stdfds[0] = src->stdfds[0];
+  dst->stdfds[1] = src->stdfds[1];
+  dst->stdfds[2] = src->stdfds[2];
+  dst->pipefds[0] = src->pipefds[0];
+  dst->pipefds[1] = src->pipefds[1];
 }
 
-int EvalCommand(ASTree *ast) {
-  if (ast == NULL) return;
+int EvalCommand(ASTTree ast) {
+  if (ast == NULL) return -1;
 
   // Node type
   switch(ast->type) {
-    case PrimCommand:
+    case PrimCommand: {
       ExecuteCommand(ast);
       break;
-    case PipeCommand:
+    }
+
+    case PipeCommand: {
       int fd[2];
       pipe(fd);
       // Put the right file desciptors.
-      CopyFds(ast->u.leftCommand, ast);
-      CopyFds(ast->u.rightCommand, ast);
+      CopyFds(ast->u.pipe.leftCommand, ast);
+      CopyFds(ast->u.pipe.rightCommand, ast);
       // left write to pipe, right cmd read from pipe
-      ast->u.leftCommand->stdfds[1] = fd[1];
-      ast->u.rightCommand->stdfds[0] = fd[0];
-      ast->u.leftCommand->pipefds[0] = fd[0];
-      ast->u.rightCommand->pipefds[1] = fd[1];
+      ast->u.pipe.leftCommand->stdfds[1] = fd[1];
+      ast->u.pipe.rightCommand->stdfds[0] = fd[0];
+      ast->u.pipe.leftCommand->pipefds[0] = fd[0];
+      ast->u.pipe.rightCommand->pipefds[1] = fd[1];
 
-      EvalCommand(ast->u.leftCommand);
-      EvalCommand(ast->u.rightCommand);
+      EvalCommand(ast->u.pipe.leftCommand);
+      EvalCommand(ast->u.pipe.rightCommand);
 
       close(fd[0]); close(fd[1]);
       break;
-    case OutRedirCommand:
-      int out = open(ast->u.out->outFile, O_RDWR | O_CREAT, 0644);
-      CopyFds(ast->u.out->command, ast);
-      ast->u.out->command.stdfds[1] = out;
-      ExecuteCommand(ast->u.out->command);
+    }
+
+    case OutRedirCommand: {
+      int out = open(ast->u.out.outFile, O_RDWR | O_CREAT, 0644);
+      CopyFds(ast->u.out.command, ast);
+      ast->u.out.command->stdfds[1] = out;
+      ExecuteCommand(ast->u.out.command);
       close(out);
       break;
+    }
+
+    case InpRedirCommand: {
+      int inp = open(ast->u.inp.inpFile, O_RDONLY);
+      CopyFds(ast->u.inp.command, ast);
+      ast->u.inp.command->stdfds[0] = inp;
+      ExecuteCommand(ast->u.inp.command);
+      close(inp);
+      break;
+    }
+
+    case OutAppendCommand: {
+      int append = open(ast->u.app.appendFile, O_RDWR | O_CREAT | O_APPEND, 0644);
+      CopyFds(ast->u.app.command, ast);
+      ast->u.app.command->stdfds[1] = append;
+      ExecuteCommand(ast->u.app.command);
+      close(append);
+      break;
+    }
+
     default:
       break;
   }

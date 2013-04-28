@@ -1,1 +1,3 @@
-int EvalCommand(ASTTree *ast);
+#include "parse.h"
+
+int EvalCommand(ASTTree ast);

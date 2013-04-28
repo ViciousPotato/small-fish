@@ -1,3 +1,11 @@
+#ifndef __PARSE_H__
+#define __PARSE_H__
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+
 typedef enum {
   PipeCommand, // |
   OutRedirCommand, // >
@@ -5,6 +13,10 @@ typedef enum {
   InpRedirCommand, // <
   PrimCommand
 } CommandType;
+
+struct _ASTNode;
+
+typedef struct _ASTNode ASTNode;
 
 typedef struct _PipeCommandNode {
   ASTNode *leftCommand;
@@ -15,6 +27,7 @@ typedef struct _PrimCommandNode {
   char **cmdTokens;
 } PrimCommandNode;
 
+// TODO: join these 3 types of commands.
 typedef struct _OutRedirCommandNode {
   ASTNode *command;
   char *outFile;
@@ -30,7 +43,7 @@ typedef struct _InpRedirCommandNode {
   char *inpFile;
 } InpRedirCommandNode;
 
-typedef struct _ASTNode {
+struct _ASTNode {
   CommandType type;
   union {
     PipeCommandNode pipe;
@@ -41,8 +54,11 @@ typedef struct _ASTNode {
   } u;
   int stdfds[3];
   int pipefds[2];
-} ASTNode;
+};
 
 typedef ASTNode *ASTTree;
 
-ASTTree ParseCommand(char **cmdTokens);
+ASTTree ParseCommand(char **cmdTokens, int tokenCnt);
+void FreeASTTree(ASTTree *ast);
+
+#endif

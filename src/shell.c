@@ -10,6 +10,10 @@
 #include <readline/readline.h>
 #include <readline/history.h>
 
+#include "tokenize.h"
+#include "parse.h"
+#include "eval.h"
+
 char *Readline() {
   char *cwd = getcwd(NULL, 0);
   char *prompt = (char *)malloc(strlen(cwd)+3); // 'dir> \0' 
@@ -58,8 +62,8 @@ int main(int argc, char *argv[]) {
     add_history(cmd);
     
     // Parse and execute
-    char **cmdTokens = Tokenize(cmd);
-    ASTTree *astTree = ParseCommand(cmdTokens);
+    int tokencnt = Tokenize(cmd, &cmdTokens);
+    ASTTree astTree = ParseCommand(cmdTokens, tokencnt);
     EvalCommand(astTree);
     WaitChildren();
     
