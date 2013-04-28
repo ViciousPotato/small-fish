@@ -16,3 +16,10 @@ $ ./fish
 Currently support command execution, output/input redirect, and piping.
 
 Also some useless builtins :P
+
+
+TODO
+=====
+
+1. Make pipe function properly.
+2. Add more tests.
