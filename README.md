@@ -15,11 +15,20 @@ $ ./fish
 
 Currently support command execution, output/input redirect, and piping.
 
+examples:
+
+```
+ls
+ls | wc -l | wc -l
+ls >> a
+echo < a
+ls > a
+```
+
 Also some useless builtins :P
 
 
 TODO
 =====
 
-1. Make pipe function properly.
-2. Add more tests.
+Add more tests.
