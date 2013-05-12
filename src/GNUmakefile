@@ -1,5 +1,5 @@
 CC = g++
-OPS = -ansi -Wall -Werror -pedantic
+OPS = -ansi -Wall -Werror -pedantic -g
 
 shell: shell.o builtin.o tokenize.o parse.o eval.o
 	$(CC) $(OPS) shell.o builtin.o tokenize.o parse.o eval.o -lreadline -ltermcap -o ../fish

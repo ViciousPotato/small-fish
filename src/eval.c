@@ -17,6 +17,9 @@ int ExecuteCommand(ASTNode *cmd) {
   int fstderr   = cmd->stdfds[2];
   int *pipefd   = cmd->pipefds;
 
+  // printf("Executing command:%s with stdin=%d, stdout=%d, stderr=%d, fd[0]=%d, fd[2]=%d\n",
+  //  command, cmd->stdfds[0], cmd->stdfds[1], cmd->stdfds[2], cmd->pipefds[0], cmd->pipefds[1]);
+
   int pid = fork();
   if (pid == 0) {
     // Child process
@@ -71,7 +74,11 @@ int EvalCommand(ASTTree ast) {
       // left write to pipe, right cmd read from pipe
       ast->u.pipe.leftCommand->stdfds[1] = fd[1];
       ast->u.pipe.rightCommand->stdfds[0] = fd[0];
+
       ast->u.pipe.leftCommand->pipefds[0] = fd[0];
+      ast->u.pipe.leftCommand->pipefds[1] = fd[1];
+      
+      ast->u.pipe.rightCommand->pipefds[0] = fd[0];
       ast->u.pipe.rightCommand->pipefds[1] = fd[1];
 
       EvalCommand(ast->u.pipe.leftCommand);
